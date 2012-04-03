@@ -340,7 +340,7 @@ void checkSimplePasswords(user users[], int numUsers){
     checkPass("dfghj", users, numUsers);    
     
 
-   int i;
+    int i;
     char* pass;
     for(i=0; i<99999; i++){
         res = asprintf(&pass, "%d", i);
@@ -392,7 +392,7 @@ void checkBirthdayPasswords(user users[], int numUsers){
     for(d=1; d<=31; d++){
         for(m=1; m<=12; m++){
             for(y=60; y<100; y++){
-                res = asprintf(&pass, "%d%d%d", m, d, y);
+                res = asprintf(&pass, "%d%d19%d", m, d, y);
                 checkPass(pass, users, numUsers);
             }
         }
@@ -521,19 +521,17 @@ int main(int argc, char *argv[] ){
         user users[NUM_USERS];
         extractData(argv[1], argv[2], users);
 
-        
-        checkDictPasswords("./dicts/dictionary-top250.txt", users, NUM_USERS);
-        checkSimplePasswords(users, NUM_USERS);
-        checkNamePasswords(users, NUM_USERS);
-        checkDictPasswords("./dicts/dictionary-bnc.txt", users, NUM_USERS);
-        checkBirthdayPasswords(users, NUM_USERS);
-        
         int pid = fork();
         if(pid == 0){
-            // let child brute force numbers       
-            checkBruteForceNumberPasswords(users, NUM_USERS);
+            // let child do 'sophisticated' attack
+            checkDictPasswords("./dicts/dictionary-top250.txt", users, NUM_USERS);
+            checkSimplePasswords(users, NUM_USERS);
+            checkNamePasswords(users, NUM_USERS);
+            checkDictPasswords("./dicts/dictionary-bnc.txt", users, NUM_USERS);
         } else {
-            // let parent brute force chars
+            // let parent brute force 
+            checkBirthdayPasswords(users, NUM_USERS);
+            checkBruteForceNumberPasswords(users, NUM_USERS);
             checkBruteForceCharPasswords(users, NUM_USERS);
         }
     }
