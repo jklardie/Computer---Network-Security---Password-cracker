@@ -5,24 +5,18 @@
  *      Author: jS88
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include <crypt.h>
+#include <unistd.h>
 
 /*
  * assumptions:
  * - passwd and shadow files have 4096 lines
  * - passwd and shadow files have same order of usernames
  *
- */
-
-
-/*
- * /etc/passwd format
- * jeffrey:x:1000:1000:Jeffrey Klardie:/home/jeffrey:/bin/bash
- *
- * /etc/shadow format
- * jeffrey:$6$CVt2kdq7zD4WjEny$m7RG1Xa2pN/8qNsgCNk:15430:0:99999:7:::
  */
 
 
@@ -33,9 +27,10 @@ const int MAX_LINE_LENGTH = 128;
 const int NUM_USERS = 4096;
 
 int foundPasswds, dict250Passwds, dictFullPasswds, yearPasswds;
+int res;
 
-const int NUM_ELEET = 15;
-char eleet[15][2] = {
+const int NUM_ELEET = 17;
+char eleet[17][2] = {
     {'a', '@'},
     {'a', '4'},
     {'b', '8'},
@@ -51,21 +46,29 @@ char eleet[15][2] = {
     {'l', '1'},
     {'l', '7'},
     {'z', '2'},
-    {'h', '#'}
+    {'h', '#'},
+    {'g', '9'}
 };
 
 int checkedPos = 0;
 char *checkedWords[250];
 
-//const int NUM_SUPER_ELEET = 6;
-//char* superEleet[6][2] = {
-//        {"u", "|_|"},
-//        {"o", "()"},
-//        {"n", "|\|"},
-//        {"d", "|)"},
-//        {"w", "\/\/"},
-//        {"h", "|-|"},
-//};
+const int NUM_SUPER_ELEET = 13;
+char* superEleet[13][2] = {
+    {"a", "/\\"},
+    {"u", "|_|"},
+    {"o", "()"},
+    {"n", "|\\|"},
+    {"d", "|)"},
+    {"d", "[)"},
+    {"m", "/\\/\\"},
+    {"m", "/V\\"},
+    {"x", "><"},
+    {"w", "\\/\\/"},
+    {"h", "|-|"},
+    {"k", "|<"},
+    {"l", "|_"}
+};
 
 typedef struct _user {
     char *username;
@@ -75,24 +78,65 @@ typedef struct _user {
     char *salt;
 } user;
 
-int strreplace(char *str, char old, char new)  {
-    char *pos;
-    int found = 0;
-    while(1){
-        pos = strchr(str, old);
-        if (pos == NULL)  {
-            return found;
+int strreplace(char *str, char old, char new, int offset)  {
+    int i=0;
+    
+    while(*str != '\0'){
+        if(*str == old && ++i > offset){
+            *str = new;
+            return i;
         }
-        *pos = new;
-        found = 1;
+        str++;
     }
+    
+    return 0;
+}
 
-    return found;
+int strstrreplace(char **str, char *old, char *new, int offset)  {
+    int i=0;
+    char *newstr, *result;
+    char oldChar = *old;
+    
+    res = asprintf(&newstr, "%s%s", *str, new);
+    result = newstr;
+    
+    while(**str != '\0'){
+        if(**str == oldChar && ++i > offset){
+            while(*new != '\0'){
+                *newstr = *new;
+                newstr++;
+                new++;
+            }
+            
+            (*str)++;
+            
+            // cp last part of str
+            while(**str != '\0'){
+                *newstr = **str;
+                newstr++;
+                (*str)++;
+            }
+            
+            // go to end of str and remove last char 
+            while(*newstr != '\0'){
+                (*newstr)++;
+            }
+            *newstr = '\0';
+            
+            res = asprintf(str, "%s", result);
+            return i;
+        }
+        
+        newstr++;
+        (*str)++;
+    }
+    
+    return 0;
 }
 
 void checkPassForUser(char *pass, char *encryptedPass, user* user){
     if(!user->passPlain && strcmp(encryptedPass, user->passEnc) == 0){
-        asprintf(&user->passPlain, "%s", pass);
+        res = asprintf(&user->passPlain, "%s", pass);
         ++foundPasswds;
         printf("%s:%s\n", user->username, pass);
         fflush(stdout);
@@ -110,49 +154,140 @@ int checkPass(char *pass, user users[], int numUsers){
     return foundPasswds - foundPasswdsStart;
 }
 
-void checkNumberPasswords(char *password, user users[], int numUsers){
+void checkNumberPasswords(char *password, user users[], int numUsers, user* user){
+    if(user != NULL && user->passPlain != NULL) return;
+        
     int i;
+    char *cryptPass;
     char *newPass;
     for(i=1; i<10; i++){
-        asprintf(&newPass, "%s%d", password, i);
-        checkPass(newPass, users, numUsers);
+        res = asprintf(&newPass, "%s%d", password, i);
+        if(users == NULL){
+            cryptPass = crypt(newPass, user->salt);
+            checkPassForUser(newPass, cryptPass, user);
+            if(user != NULL && user->passPlain != NULL) return;
+        } else {
+            checkPass(newPass, users, numUsers);
+        }
     }
 
     for(i=85; i<100; i++){
-        asprintf(&newPass, "%s%d", password, i);
-        checkPass(newPass, users, numUsers);
-
-        asprintf(&newPass, "%s19%d", password, i);
-        checkPass(newPass, users, numUsers);
-    }
-}
-
-void checkEleetPasswords(char *password, user users[], int numUsers){
-    int i;
-    char *newPass;
-    for(i=0; i<NUM_ELEET; i++){
-        asprintf(&newPass, "%s", password);
-
-        if(strreplace(newPass, eleet[i][0], eleet[i][1]) == 1){
+        res = asprintf(&newPass, "%s%d", password, i);
+        if(users == NULL){
+            cryptPass = crypt(newPass, user->salt);
+            checkPassForUser(newPass, cryptPass, user);
+            if(user != NULL && user->passPlain != NULL) return;
+        } else {
+            checkPass(newPass, users, numUsers);
+        }
+            
+        res = asprintf(&newPass, "%s19%d", password, i);
+        if(users == NULL){
+            cryptPass = crypt(newPass, user->salt);
+            checkPassForUser(newPass, cryptPass, user);
+            if(user != NULL && user->passPlain != NULL) return;
+        } else {
             checkPass(newPass, users, numUsers);
         }
     }
 }
 
-void checkCapitalPasswords(char *password, user users[], int numUsers){
-    char *pass = password;
-    char *ucfirstPass;
-    asprintf(&ucfirstPass, "%s", password);
+void checkEleetPasswords(char *password, user users[], int numUsers, user* user){
+    if(user != NULL && user->passPlain != NULL) return;
+    
+    int i;
+    char *cryptPass;
+    char *newPass;
+    int offset, offsetSuperEleet;
+    for(i=0; i<NUM_ELEET; i++){
+        offset = 0;
+        res = asprintf(&newPass, "%s", password);
 
+        while((offset = strreplace(newPass, eleet[i][0], eleet[i][1], offset)) > 0){
+            if(users == NULL){
+                cryptPass = crypt(newPass, user->salt);
+                checkPassForUser(newPass, cryptPass, user);
+                if(user != NULL && user->passPlain != NULL) return;
+            } else {
+                checkPass(newPass, users, numUsers);
+            }
+            
+            res = asprintf(&newPass, "%s", password);
+            
+        }
+    }
+    
+    for(i=0; i<NUM_SUPER_ELEET; i++){
+        offsetSuperEleet = 0;
+        res = asprintf(&newPass, "%s", password);
+        
+        while((offsetSuperEleet = strstrreplace(&newPass, superEleet[i][0], superEleet[i][1], offsetSuperEleet)) > 0){
+            if(users == NULL){
+                cryptPass = crypt(newPass, user->salt);
+                checkPassForUser(newPass, cryptPass, user);
+                if(user != NULL && user->passPlain != NULL) return;
+            } else {
+                checkPass(newPass, users, numUsers);
+            }
+            
+            res = asprintf(&newPass, "%s", password);
+        }
+    }
+}
+
+void checkCapitalPasswords(char *password, user users[], int numUsers, user* user){
+    if(user != NULL && user->passPlain != NULL) return;
+    
+    char *pass = password;
+    char *prevPass;
+    char *cryptPass;
+
+    int pos = 0;
+    while(*password != '\0'){
+        if(user != NULL && user->passPlain != NULL) return;
+    
+        res = asprintf(&prevPass, "%s\n", password);
+        if(pos++ > 0){
+            --password;
+            *password = tolower((unsigned char) *password);            
+            
+            ++password;
+        }
+        
+        *password = toupper((unsigned char) *password);
+        ++password;
+        
+        if(strcmp(password, prevPass) == 0)
+            continue;
+            
+        if(users == NULL){
+            cryptPass = crypt(pass, user->salt);
+            checkPassForUser(pass, cryptPass, user);
+            if(user != NULL && user->passPlain != NULL) return;
+        } else {
+            checkPass(pass, users, numUsers);
+        }
+    }
+
+    if(user != NULL && user->passPlain != NULL) return;
+            
+    password = pass;
+    prevPass = password;
     while(*password != '\0'){
         *password = toupper((unsigned char) *password);
         ++password;
-
+        
+        if(strcmp(password, prevPass) == 0)
+            return;
+    }
+    
+    if(users == NULL){
+        cryptPass = crypt(pass, user->salt);
+        checkPassForUser(pass, cryptPass, user);
+        if(user != NULL && user->passPlain != NULL) return;
+    } else {
         checkPass(pass, users, numUsers);
     }
-
-    *ucfirstPass = toupper((unsigned char) *ucfirstPass);
-    checkPass(ucfirstPass, users, numUsers);
 }
 
 int alreadyCheckedWord(char* password){
@@ -168,26 +303,24 @@ void checkDictPasswords(char *dictPath, user users[], int numUsers){
     FILE *dictfp = fopen(dictPath, "r");
     if(dictfp != NULL){
         char password[MAX_LINE_LENGTH];
-
         while(fgets(password, MAX_LINE_LENGTH, dictfp) != NULL ){
             char *nl = strrchr(password, '\r');
             if (nl) *nl = '\0';
             nl = strrchr(password, '\n');
             if (nl) *nl = '\0';
-
+            
             if(alreadyCheckedWord(password) == 1)
                 continue;
 
             if(checkedPos < 250){
-                asprintf(&checkedWords[checkedPos++], "%s", password);
+                res = asprintf(&checkedWords[checkedPos++], "%s", password);
             }
 
             checkPass(password, users, numUsers);
-            checkCapitalPasswords(password, users, numUsers);
-            checkEleetPasswords(password, users, numUsers);
-            checkNumberPasswords(password, users, numUsers);
+            checkEleetPasswords(password, users, numUsers, NULL);
+            checkNumberPasswords(password, users, numUsers, NULL);
+            checkCapitalPasswords(password, users, numUsers, NULL);
         }
-
         fclose (dictfp);
     } else {
         perror(dictPath);
@@ -195,28 +328,117 @@ void checkDictPasswords(char *dictPath, user users[], int numUsers){
 }
 
 void checkSimplePasswords(user users[], int numUsers){
-    checkPass("1", users, numUsers);
-    checkPass("22", users, numUsers);
-    checkPass("333", users, numUsers);
-    checkPass("4444", users, numUsers);
-    checkPass("55555", users, numUsers);
     checkPass("666666", users, numUsers);
     checkPass("7777777", users, numUsers);
     checkPass("88888888", users, numUsers);
     checkPass("999999999", users, numUsers);
+    checkPass("werty", users, numUsers);
+    checkPass("abcdefg", users, numUsers);
+    checkPass("bcdefg", users, numUsers);
+    checkPass("asdfghj", users, numUsers);
+    checkPass("tyuiop", users, numUsers);    
+    checkPass("dfghj", users, numUsers);    
+    
+
+   int i;
+    char* pass;
+    for(i=0; i<99999; i++){
+        res = asprintf(&pass, "%d", i);
+        checkPass(pass, users, numUsers);
+    }
+    
+}
+
+void checkBruteForceNumberPasswords(user users[], int numUsers){
+    int i;
+    char* pass;
+    for(i=100000; i<9999999; i++){
+        res = asprintf(&pass, "%d", i);
+        checkPass(pass, users, numUsers);
+    }
+    
+}
+
+void checkBruteForceCharPasswords(user users[], int numUsers){
+    int i, j, k, l ,m;
+    char* pass;
+    int a = (int)'a';
+    int z = (int)'z';
+    
+    for(i=a; i<=z; i++){
+        for(j=a; j<=z; j++){
+            for(k=a; k<=z; k++){
+                res = asprintf(&pass, "%c%c%c", (char)i,(char)j,(char)k);
+                checkPass(pass, users, numUsers);
+                
+                for(l=a; l<=z; l++){
+                    res = asprintf(&pass, "%c%c%c%c", (char)i,(char)j,(char)k,(char)l);
+                    checkPass(pass, users, numUsers);
+                    
+                    for(m=a; m<=z; m++){
+                        res = asprintf(&pass, "%c%c%c%c%c", (char)i,(char)j,(char)k,(char)l,(char)m);
+                        checkPass(pass, users, numUsers);
+                    }
+                }
+            }
+        }
+    }
+    
+}
+
+void checkBirthdayPasswords(user users[], int numUsers){
+    int d, m, y;
+    char* pass;
+    for(d=1; d<=31; d++){
+        for(m=1; m<=12; m++){
+            for(y=60; y<100; y++){
+                res = asprintf(&pass, "%d%d%d", m, d, y);
+                checkPass(pass, users, numUsers);
+            }
+        }
+    }
 }
 
 void checkNamePasswords(user users[], int numUsers){
     int i;
-    char* name;
+    char *firstname, *lastname;
     char *password;
 
     for(i=0; i<numUsers; i++){
-        name = strtok(users[i].fullname, " ");
-        if(name == NULL) continue;
+        if(users[i].passPlain != NULL) continue; 
+        
+        firstname = strtok(users[i].fullname, " ");
+        if(firstname == NULL) continue;
 
-        password = crypt(name, users[i].salt);
-        checkPassForUser(name, password, &users[i]);
+        *firstname = tolower((unsigned char) *firstname);
+
+        password = crypt(firstname, users[i].salt);
+        checkPassForUser(firstname, password, &users[i]);
+        
+        checkNumberPasswords(firstname, NULL, 0, &users[i]);
+        checkEleetPasswords(firstname, NULL, 0, &users[i]);
+        
+        *firstname = toupper((unsigned char) *firstname);
+        checkEleetPasswords(firstname, NULL, 0, &users[i]);
+        checkNumberPasswords(firstname, NULL, 0, &users[i]);
+        checkCapitalPasswords(firstname, NULL, 0, &users[i]);
+        
+        // check lastname
+        lastname = strtok(NULL, " ");
+        if(lastname == NULL) continue;
+
+        *lastname = tolower((unsigned char) *lastname);
+
+        password = crypt(lastname, users[i].salt);
+        checkPassForUser(lastname, password, &users[i]);
+        
+        checkNumberPasswords(lastname, NULL, 0, &users[i]);
+        checkEleetPasswords(lastname, NULL, 0, &users[i]);
+        
+        *lastname = toupper((unsigned char) *lastname);
+        checkEleetPasswords(lastname, NULL, 0, &users[i]);
+        checkNumberPasswords(lastname, NULL, 0, &users[i]);
+        checkCapitalPasswords(lastname, NULL, 0, &users[i]);
     }
 
 }
@@ -239,8 +461,8 @@ void extractPass(char *shadowPath, user users[]){
             if(strcmp(users[++i].username, username) != 0)
                 printf("Usernames not correct. Passwd username: %s, shadow username: %s\n", users[i].username, username);
 
-            asprintf(&users[i].passEnc, "%s", password);
-            asprintf(&users[i].salt, "$%s$%s$", algorithm, salt);
+            res = asprintf(&users[i].passEnc, "%s", password);
+            res = asprintf(&users[i].salt, "$%s$%s$", algorithm, salt);
             users[i].passPlain = NULL;
         }
 
@@ -258,6 +480,7 @@ void extractName(char *passwdPath, user users[]){
         char *username = NULL, *fullname = NULL;
 
         int i = -1;
+        int res;
         while(fgets(line, MAX_LINE_LENGTH, passwdfp) != NULL ){
             username = strtok(line, DELIMITER);
 
@@ -271,13 +494,13 @@ void extractName(char *passwdPath, user users[]){
             if(strtok(NULL, DELIMITER) == NULL) // if shell is empty, the account had no user
                 fullname = "";
 
-            asprintf(&users[++i].username, "%s", username);
+            res = asprintf(&users[++i].username, "%s", username);
 
             char *name = NULL;
             if((name = strtok(fullname, ",")) != NULL)
                 fullname = name;
 
-            asprintf(&users[i].fullname, "%s", fullname);
+            res = asprintf(&users[i].fullname, "%s", fullname);
         }
 
         fclose (passwdfp);
@@ -298,10 +521,21 @@ int main(int argc, char *argv[] ){
         user users[NUM_USERS];
         extractData(argv[1], argv[2], users);
 
+        
+        checkDictPasswords("./dicts/dictionary-top250.txt", users, NUM_USERS);
         checkSimplePasswords(users, NUM_USERS);
         checkNamePasswords(users, NUM_USERS);
-        checkDictPasswords("./files/dictionary-top250.txt", users, NUM_USERS);
-        checkDictPasswords("./files/dictionary-bnc.txt", users, NUM_USERS);
+        checkDictPasswords("./dicts/dictionary-bnc.txt", users, NUM_USERS);
+        checkBirthdayPasswords(users, NUM_USERS);
+        
+        int pid = fork();
+        if(pid == 0){
+            // let child brute force numbers       
+            checkBruteForceNumberPasswords(users, NUM_USERS);
+        } else {
+            // let parent brute force chars
+            checkBruteForceCharPasswords(users, NUM_USERS);
+        }
     }
 
     return 0;
