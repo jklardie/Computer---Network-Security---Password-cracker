@@ -90,17 +90,21 @@ int strreplace(char *str, char old, char new)  {
     return found;
 }
 
+void checkPassForUser(char *pass, char *encryptedPass, user* user){
+    if(!user->passPlain && strcmp(encryptedPass, user->passEnc) == 0){
+        asprintf(&user->passPlain, "%s", pass);
+        ++foundPasswds;
+        printf("%s:%s\n", user->username, pass);
+        fflush(stdout);
+    }
+}
+
 int checkPass(char *pass, user users[], int numUsers){
     char *password = crypt(pass, users[0].salt);
 
     int i, foundPasswdsStart = foundPasswds;
     for(i=0; i<numUsers; i++){
-        if(users[i].passPlain == NULL && strcmp(password, users[i].passEnc) == 0){
-            asprintf(&users[i].passPlain, "%s", pass);
-            ++foundPasswds;
-            printf("%s:%s\n", users[i].username, pass);
-            fflush(stdout);
-        }
+        checkPassForUser(pass, password, &users[i]);
     }
 
     return foundPasswds - foundPasswdsStart;
@@ -117,6 +121,9 @@ void checkNumberPasswords(char *password, user users[], int numUsers){
     for(i=85; i<100; i++){
         asprintf(&newPass, "%s%d", password, i);
         checkPass(newPass, users, numUsers);
+
+        asprintf(&newPass, "%s19%d", password, i);
+        checkPass(newPass, users, numUsers);
     }
 }
 
@@ -127,7 +134,6 @@ void checkEleetPasswords(char *password, user users[], int numUsers){
         asprintf(&newPass, "%s", password);
 
         if(strreplace(newPass, eleet[i][0], eleet[i][1]) == 1){
-            //printf("checking %s\n", newPass);
             checkPass(newPass, users, numUsers);
         }
     }
@@ -141,6 +147,8 @@ void checkCapitalPasswords(char *password, user users[], int numUsers){
     while(*password != '\0'){
         *password = toupper((unsigned char) *password);
         ++password;
+
+        checkPass(pass, users, numUsers);
     }
 
     *ucfirstPass = toupper((unsigned char) *ucfirstPass);
@@ -184,6 +192,33 @@ void checkDictPasswords(char *dictPath, user users[], int numUsers){
     } else {
         perror(dictPath);
     }
+}
+
+void checkSimplePasswords(user users[], int numUsers){
+    checkPass("1", users, numUsers);
+    checkPass("22", users, numUsers);
+    checkPass("333", users, numUsers);
+    checkPass("4444", users, numUsers);
+    checkPass("55555", users, numUsers);
+    checkPass("666666", users, numUsers);
+    checkPass("7777777", users, numUsers);
+    checkPass("88888888", users, numUsers);
+    checkPass("999999999", users, numUsers);
+}
+
+void checkNamePasswords(user users[], int numUsers){
+    int i;
+    char* name;
+    char *password;
+
+    for(i=0; i<numUsers; i++){
+        name = strtok(users[i].fullname, " ");
+        if(name == NULL) continue;
+
+        password = crypt(name, users[i].salt);
+        checkPassForUser(name, password, &users[i]);
+    }
+
 }
 
 void extractPass(char *shadowPath, user users[]){
@@ -263,6 +298,8 @@ int main(int argc, char *argv[] ){
         user users[NUM_USERS];
         extractData(argv[1], argv[2], users);
 
+        checkSimplePasswords(users, NUM_USERS);
+        checkNamePasswords(users, NUM_USERS);
         checkDictPasswords("./files/dictionary-top250.txt", users, NUM_USERS);
         checkDictPasswords("./files/dictionary-bnc.txt", users, NUM_USERS);
     }
