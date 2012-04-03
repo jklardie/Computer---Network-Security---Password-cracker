@@ -54,6 +54,9 @@ char eleet[15][2] = {
     {'h', '#'}
 };
 
+int checkedPos = 0;
+char *checkedWords[250];
+
 //const int NUM_SUPER_ELEET = 6;
 //char* superEleet[6][2] = {
 //        {"u", "|_|"},
@@ -78,7 +81,7 @@ int strreplace(char *str, char old, char new)  {
     while(1){
         pos = strchr(str, old);
         if (pos == NULL)  {
-            break;
+            return found;
         }
         *pos = new;
         found = 1;
@@ -124,7 +127,7 @@ void checkEleetPasswords(char *password, user users[], int numUsers){
         asprintf(&newPass, "%s", password);
 
         if(strreplace(newPass, eleet[i][0], eleet[i][1]) == 1){
-            printf("checking %s\n", newPass);
+            //printf("checking %s\n", newPass);
             checkPass(newPass, users, numUsers);
         }
     }
@@ -144,57 +147,42 @@ void checkCapitalPasswords(char *password, user users[], int numUsers){
     checkPass(ucfirstPass, users, numUsers);
 }
 
+int alreadyCheckedWord(char* password){
+    int i;
+    for(i=0; i<checkedPos; i++)
+        if(strcmp(password, checkedWords[i]) == 0)
+            return 1;
+
+    return 0;
+}
+
 void checkDictPasswords(char *dictPath, user users[], int numUsers){
     FILE *dictfp = fopen(dictPath, "r");
-    FILE *dictfp2 = fopen(dictPath, "r");
-    if(dictfp != NULL && dictfp2 != NULL){
+    if(dictfp != NULL){
         char password[MAX_LINE_LENGTH];
 
-        int numLines = 0;
-        char ch='\0';
-        while(ch != EOF) {
-            ch = fgetc(dictfp);
-            if(ch=='\n') numLines++;
-        }
+        while(fgets(password, MAX_LINE_LENGTH, dictfp) != NULL ){
+            char *nl = strrchr(password, '\r');
+            if (nl) *nl = '\0';
+            nl = strrchr(password, '\n');
+            if (nl) *nl = '\0';
 
-        rewind(dictfp);
+            if(alreadyCheckedWord(password) == 1)
+                continue;
 
-        int pid = fork();
-        int lines = 0;
-        if(pid == 0){
-            // child does first half
-            while(fgets(password, MAX_LINE_LENGTH, dictfp) != NULL ){
-                if(++lines >= numLines / 2) break;
-
-                char *nl = strrchr(password, '\r');
-                if (nl) *nl = '\0';
-                nl = strrchr(password, '\n');
-                if (nl) *nl = '\0';
-
-                checkPass(password, users, numUsers);
-                checkCapitalPasswords(password, users, numUsers);
-                checkEleetPasswords(password, users, numUsers);
-                checkNumberPasswords(password, users, numUsers);
-            }
-        } else {
-            // parent does second half
-            while(fgets(password, MAX_LINE_LENGTH, dictfp2) != NULL ){
-                if(++lines < numLines / 2) continue;
-
-                char *nl = strrchr(password, '\r');
-                if (nl) *nl = '\0';
-                nl = strrchr(password, '\n');
-                if (nl) *nl = '\0';
-
-                checkPass(password, users, numUsers);
-                checkCapitalPasswords(password, users, numUsers);
-                checkEleetPasswords(password, users, numUsers);
-                checkNumberPasswords(password, users, numUsers);
+            if(checkedPos < 250){
+                asprintf(&checkedWords[checkedPos++], "%s", password);
             }
 
+            checkPass(password, users, numUsers);
+            checkCapitalPasswords(password, users, numUsers);
+            checkEleetPasswords(password, users, numUsers);
+            checkNumberPasswords(password, users, numUsers);
         }
 
-
+        fclose (dictfp);
+    } else {
+        perror(dictPath);
     }
 }
 
