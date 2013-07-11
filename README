@@ -1,5 +1,11 @@
-jS88
-Jeffrey Klardie
-cns@jeffreyklardie.nl
-jke370
-1670794
+For the course Computer and Network Security I had to do this project. 
+
+Given a /etc/passwd file, a /etc/shadow file and a limited amount of time, recover as many user passwords as possible using dictionaries of words commonly used in passwords.
+
+The program must:
+- be written entirely in C
+- contain only code written by yourself
+- not use external libraries other than GNU libc (included by default) and libcrypt (-lcrypt)
+- not invoke external programs
+- compile and run on a standard installation of Ubuntu 11.10 x86-64
+
